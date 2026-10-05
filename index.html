@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Stack Simulator</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;700;800&family=Courier+Prime:wght@400;700&family=Kalam:wght@400;700&display=swap">
+<style>
+/* Layout: a page from a squared lab notebook. The stack is drawn the way a
+   textbook draws it (an open-top box), with pen notes beside it. One look only. */
+:root{
+  --paper:#fbfbf5; --grid:#dde6ee; --ink:#1b2742; --pencil:#5d6778;
+  --block:#ffd84d; --red:#cf3a28; --green:#2c7a4b; --white:#ffffff;
+  --head:"Archivo","Arial Narrow",Arial,sans-serif;
+  --text:"Archivo",Arial,Helvetica,sans-serif;
+  --mono:"Courier Prime","Courier New",Courier,monospace;
+  --hand:"Kalam","Comic Sans MS","Segoe Print",cursive;
+  --h:46px;                       /* height of one stack slot */
+}
+*{box-sizing:border-box}
+body{
+  margin:0;color:var(--ink);font:16px/1.5 var(--text);
+  background-color:var(--paper);
+  background-image:linear-gradient(var(--grid) 1px,transparent 1px),linear-gradient(90deg,var(--grid) 1px,transparent 1px);
+  background-size:24px 24px;
+}
+.page{max-width:920px;margin:0 auto;padding-inline:20px;padding-block:32px 64px;display:flex;flex-direction:column;gap:36px}
+
+/* heading */
+.by{margin:0 0 6px;font:400 15px/1.3 var(--mono);color:var(--pencil)}
+h1{margin:0;font:800 clamp(34px,7vw,56px)/1 var(--head);letter-spacing:-.02em}
+h1 span{background:var(--block);padding:0 .12em}
+.intro{margin:14px 0 0;max-width:58ch}
+
+/* main area: drawing on the left, controls and notes on the right */
+.bench{display:flex;flex-wrap:wrap;gap:36px 56px;align-items:flex-start}
+.left{flex:0 0 auto}
+.right{flex:1 1 320px;min-width:0;display:flex;flex-direction:column;gap:22px}
+h2{margin:0 0 10px;font:700 20px/1.2 var(--head)}
+
+/* the drawing */
+.rig{position:relative;display:flex;align-items:flex-end;padding:40px 118px 34px 0}
+.indices{display:flex;flex-direction:column-reverse;width:30px;margin-right:8px}
+.indices span{height:var(--h);display:flex;align-items:center;justify-content:flex-end;font:400 15px var(--mono);color:var(--pencil)}
+.tube{
+  width:150px;height:calc(var(--h) * 6);display:flex;flex-direction:column-reverse;
+  border:4px solid var(--ink);border-top:none;background-color:var(--white);
+  background-image:repeating-linear-gradient(to top,transparent 0,transparent calc(var(--h) - 1px),var(--grid) calc(var(--h) - 1px),var(--grid) var(--h));
+}
+.block{height:var(--h);flex:none;display:flex;align-items:center;justify-content:center;
+  background:var(--block);border:2px solid var(--ink);margin:0 4px;font:700 22px/1 var(--mono)}
+.block + .block{border-bottom:none}
+.ghost{position:absolute;left:46px;width:134px;margin:0;pointer-events:none}
+.ptr{position:absolute;left:196px;bottom:calc(47px + var(--h) * 2);white-space:nowrap;font:700 20px/28px var(--hand);color:var(--red);transition:bottom .25s}
+.cap{position:absolute;left:38px;top:6px;font:400 17px/1.2 var(--hand);color:var(--pencil)}
+.base{position:absolute;left:38px;bottom:4px;width:150px;text-align:center;font:400 17px/1.2 var(--hand);color:var(--pencil)}
+
+/* controls */
+.controls{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end}
+.controls label{display:flex;flex-direction:column;gap:3px;font:500 14px var(--text)}
+input,button{font:inherit;color:inherit;border-radius:0}
+#val{width:84px;height:44px;padding:0 10px;border:2px solid var(--ink);background:var(--white);font:700 20px var(--mono)}
+button{height:44px;padding:0 16px;border:2px solid var(--ink);background:var(--white);font:700 16px var(--head);cursor:pointer;box-shadow:3px 3px 0 var(--ink)}
+button:active{transform:translate(3px,3px);box-shadow:none}
+#pushBtn{background:var(--ink);color:var(--white);box-shadow:3px 3px 0 var(--block)}
+#clearBtn{border-style:dashed;box-shadow:none;font-weight:500}
+:focus-visible{outline:3px solid var(--red);outline-offset:2px}
+
+/* the note that explains the last operation */
+.note{margin:0;min-height:3.2em;font:400 21px/1.35 var(--hand)}
+.note.bad{color:var(--red);font-weight:700}
+.state{margin:0;font:400 16px/1.6 var(--mono)}
+.state b{background:var(--block);padding:0 5px}
+
+/* trace table */
+.scroll{overflow-x:auto;max-height:236px;overflow-y:auto;border-top:2px solid var(--ink);border-bottom:2px solid var(--ink);background:var(--white)}
+table{border-collapse:collapse;width:100%;font:400 15px/1.4 var(--mono);font-variant-numeric:tabular-nums}
+th,td{padding:6px 10px;text-align:left;white-space:nowrap;border-bottom:1px solid var(--grid)}
+th{position:sticky;top:0;background:var(--white);font:700 14px var(--text);border-bottom:2px solid var(--ink)}
+tr.err td{color:var(--red)}
+.empty td{color:var(--pencil);font-family:var(--text)}
+
+/* algorithm */
+.algo{display:flex;flex-wrap:wrap;gap:20px 44px}
+.algo pre{margin:0;font:400 16px/1.6 var(--mono);overflow-x:auto;max-width:100%}
+.ln{display:block;padding:0 6px}
+.ln.on{background:var(--block);font-weight:700}
+.cost{margin:18px 0 0;max-width:62ch}
+.cost code{font:700 16px var(--mono)}
+
+@media (prefers-reduced-motion:no-preference){
+  .drop{animation:drop .32s cubic-bezier(.3,1.3,.6,1)}
+  .lift{animation:lift .4s ease-in forwards}
+  .look{animation:look .5s}
+  .shake{animation:shake .3s}
+}
+@media (prefers-reduced-motion:reduce){.lift{display:none}.ptr{transition:none}}
+@keyframes drop{from{transform:translateY(-120px);opacity:0}to{transform:none;opacity:1}}
+@keyframes lift{to{transform:translateY(-110px);opacity:0}}
+@keyframes look{50%{background:var(--white);transform:scale(1.06)}}
+@keyframes shake{25%{transform:translateX(-6px)}75%{transform:translateX(6px)}}
+</style>
+</head>
+<body>
+
+<div class="page">
+  <header>
+    <p class="by">DAA (BCA202-6) / CIA 3(b) / Nisanth V S, 6BCA B</p>
+    <h1><span>Stack</span> Simulator</h1>
+    <p class="intro">A stack lets you add and remove only at one end, called the top. Whatever went in last comes out first (LIFO). Push a few numbers, then pop them, and watch the order they leave in.</p>
+  </header>
+
+  <div class="bench">
+    <div class="left">
+      <div class="rig" id="rig">
+        <span class="cap">MAX = 6</span>
+        <div class="indices"><span>0</span><span>1</span><span>2</span><span>3</span><span>4</span><span>5</span></div>
+        <div class="tube" id="tube"></div>
+        <span class="ptr" id="ptr"></span>
+        <span class="base">S[ ]</span>
+      </div>
+    </div>
+
+    <div class="right">
+      <div class="controls">
+        <label for="val">Value<input type="text" id="val" value="40" maxlength="4" autocomplete="off" inputmode="numeric"></label>
+        <button id="pushBtn">Push</button>
+        <button id="popBtn">Pop</button>
+        <button id="peekBtn">Peek</button>
+        <button id="clearBtn">Clear</button>
+      </div>
+
+      <p class="note" id="note" aria-live="polite"></p>
+      <p class="state">top = <b id="sTop">2</b> &nbsp; size = <b id="sSize">3</b> &nbsp; isEmpty = <b id="sEmpty">false</b> &nbsp; isFull = <b id="sFull">false</b></p>
+
+      <div>
+        <h2>Trace</h2>
+        <div class="scroll">
+          <table>
+            <thead><tr><th>#</th><th>Operation</th><th>Result</th><th>top</th><th>Stack (bottom to top)</th></tr></thead>
+            <tbody id="trace"><tr class="empty"><td colspan="5">Nothing yet. Each operation you run is recorded here.</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <section>
+    <h2>Algorithm</h2>
+    <div class="algo">
+<pre><span class="ln">Push(S, x)</span><span class="ln" id="pu1">  if top = MAX - 1 then</span><span class="ln" id="pu2">      error "overflow"</span><span class="ln" id="pu3">  top ← top + 1</span><span class="ln" id="pu4">  S[top] ← x</span></pre>
+<pre><span class="ln">Pop(S)</span><span class="ln" id="po1">  if top = -1 then</span><span class="ln" id="po2">      error "underflow"</span><span class="ln" id="po3">  x ← S[top]</span><span class="ln" id="po4">  top ← top - 1</span><span class="ln" id="po5">  return x</span></pre>
+<pre><span class="ln">Peek(S)</span><span class="ln" id="pe1">  if top = -1 then</span><span class="ln" id="pe2">      error "empty"</span><span class="ln" id="pe3">  return S[top]</span></pre>
+    </div>
+    <p class="cost">The highlighted lines are the ones that just ran. None of the three operations has a loop, so each takes <code>O(1)</code> time however many elements are stored. The array itself takes <code>O(n)</code> space for n elements.</p>
+  </section>
+</div>
+
+<script>
+var MAX = 6;               // capacity of the stack
+var stack = [10, 20, 30];  // the last element of the array is the TOP
+var stepNo = 0;            // counts the operations for the trace table
+
+function el(id) { return document.getElementById(id); }
+
+// Makes one yellow block showing a value.
+function makeBlock(value) {
+  var b = document.createElement('div');
+  b.className = 'block';
+  b.textContent = value;
+  return b;
+}
+
+// Moves the red "top" pointer and updates the state line.
+function showState() {
+  var top = stack.length - 1;
+  el('ptr').textContent = '<-- top = ' + top;
+  el('ptr').style.bottom = 'calc(47px + var(--h) * ' + top + ')';
+  el('sTop').textContent = top;
+  el('sSize').textContent = stack.length;
+  el('sEmpty').textContent = stack.length === 0;
+  el('sFull').textContent = stack.length === MAX;
+}
+
+// Writes the note, adds a row to the trace table and highlights pseudocode lines.
+function report(operation, result, message, isError, lines) {
+  el('note').textContent = message;
+  el('note').className = isError ? 'note bad' : 'note';
+
+  stepNo = stepNo + 1;
+  var row = document.createElement('tr');
+  if (isError) row.className = 'err';
+  var cells = [stepNo, operation, result, stack.length - 1, stack.length ? stack.join(', ') : '(empty)'];
+  for (var i = 0; i < cells.length; i++) {
+    var td = document.createElement('td');
+    td.textContent = cells[i];
+    row.appendChild(td);
+  }
+  var body = el('trace');
+  if (stepNo === 1) body.innerHTML = '';
+  body.insertBefore(row, body.firstChild);
+
+  var old = document.querySelectorAll('.ln.on');
+  for (var j = 0; j < old.length; j++) old[j].classList.remove('on');
+  for (var k = 0; k < lines.length; k++) el(lines[k]).classList.add('on');
+}
+
+// Replays a CSS animation on an element.
+function play(element, name) {
+  element.classList.remove(name);
+  void element.offsetWidth;
+  element.classList.add(name);
+}
+
+function push() {
+  var text = el('val').value.trim();
+  if (!/^-?\d{1,3}$/.test(text)) {
+    el('note').textContent = 'Type a whole number between -999 and 999.';
+    el('note').className = 'note bad';
+    return;
+  }
+  var x = parseInt(text, 10);
+  if (stack.length === MAX) {                        // overflow check
+    play(el('tube'), 'shake');
+    report('Push(' + x + ')', 'overflow', 'Overflow! top is already MAX - 1, so there is no room for ' + x + '.', true, ['pu1', 'pu2']);
+    return;
+  }
+  stack.push(x);
+  var b = makeBlock(x);
+  el('tube').appendChild(b);
+  play(b, 'drop');
+  showState();
+  report('Push(' + x + ')', 'ok', x + ' goes on top. top moved up to ' + (stack.length - 1) + '.', false, ['pu1', 'pu3', 'pu4']);
+  el('val').value = x + 10;
+}
+
+function pop() {
+  if (stack.length === 0) {                          // underflow check
+    play(el('tube'), 'shake');
+    report('Pop()', 'underflow', 'Underflow! top is -1, so there is nothing to pop.', true, ['po1', 'po2']);
+    return;
+  }
+  var x = stack.pop();
+  el('tube').removeChild(el('tube').lastChild);
+
+  // a copy of the block that floats up and fades out
+  var ghost = makeBlock(x);
+  ghost.className = 'block ghost lift';
+  ghost.style.bottom = 'calc(38px + var(--h) * ' + stack.length + ')';
+  el('rig').appendChild(ghost);
+  setTimeout(function () { el('rig').removeChild(ghost); }, 420);
+
+  showState();
+  report('Pop()', 'returns ' + x, x + ' comes out. It was pushed last, so it leaves first.', false, ['po1', 'po3', 'po4', 'po5']);
+}
+
+function peek() {
+  if (stack.length === 0) {
+    report('Peek()', 'empty', 'The stack is empty, so there is no top element to look at.', true, ['pe1', 'pe2']);
+    return;
+  }
+  var x = stack[stack.length - 1];
+  play(el('tube').lastChild, 'look');
+  report('Peek()', 'returns ' + x, 'The top is ' + x + '. Peek only reads it, nothing is removed.', false, ['pe1', 'pe3']);
+}
+
+function clearStack() {
+  stack = [];
+  el('tube').innerHTML = '';
+  showState();
+  report('Clear()', 'ok', 'Everything is removed. top is back to -1.', false, []);
+}
+
+el('pushBtn').onclick = push;
+el('popBtn').onclick = pop;
+el('peekBtn').onclick = peek;
+el('clearBtn').onclick = clearStack;
+el('val').onkeydown = function (e) { if (e.key === 'Enter') push(); };
+
+// Starting state: 10, 20, 30 already pushed.
+for (var i = 0; i < stack.length; i++) el('tube').appendChild(makeBlock(stack[i]));
+showState();
+el('note').textContent = '10, 20 and 30 were pushed in that order, so 30 is on top. Press Pop and see which one leaves.';
+</script>
+</body>
+</html>
